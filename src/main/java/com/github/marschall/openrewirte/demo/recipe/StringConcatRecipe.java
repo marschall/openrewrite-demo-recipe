@@ -12,13 +12,8 @@ import org.openrewrite.java.tree.TypeUtils;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 
-// REVIEW:
-// dependency on Jackson
-// dependency on internal package
-// class named J
 public class StringConcatRecipe extends Recipe {
 
-  // Recipes must be serializable. This is verified by RecipeTest.assertChanged() and RecipeTest.assertUnchanged()
   @JsonCreator
   public StringConcatRecipe() {
     super();
@@ -26,14 +21,13 @@ public class StringConcatRecipe extends Recipe {
 
   @Override
   public String getDisplayName() {
-    return "String concat";
+    return "String Concat";
   }
 
   @Override
   public String getDescription() {
     return "Replaces string concat with multi line strings";
   }
-
 
   @Override
   protected JavaVisitor<ExecutionContext> getVisitor() {
@@ -47,13 +41,8 @@ public class StringConcatRecipe extends Recipe {
         .build();
 
     @Override
-    public J visitLiteral(Literal literal, ExecutionContext p) {
-      return super.visitLiteral(literal, p);
-    }
-
-    @Override
-    public J visitBinary(J.Binary b, ExecutionContext p) {
-      J j = super.visitBinary(b, p);
+    public J visitBinary(J.Binary b, ExecutionContext executionContext) {
+      J j = super.visitBinary(b, executionContext);
       if (j instanceof J.Binary) {
         J.Binary binary = (Binary) j;
         if (isStringConcat(binary)) {
@@ -61,7 +50,8 @@ public class StringConcatRecipe extends Recipe {
             J.Literal left = binary.getLeft().cast();
             J.Literal right = binary.getRight().cast();
             String value = "" + left.getValue() + right.getValue();
-            return binary.withTemplate(multiLineStringTemplate, binary.getCoordinates().replace(), value);
+            J textBlock = binary.withTemplate(multiLineStringTemplate, binary.getCoordinates().replace(), value);
+            return autoFormat(textBlock, executionContext);
           }
         }
         return binary;

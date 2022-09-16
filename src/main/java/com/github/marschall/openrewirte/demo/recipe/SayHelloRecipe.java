@@ -69,7 +69,7 @@ public class SayHelloRecipe extends Recipe {
       }
       
       // Check if the class already has a method named "hello" so we don't incorrectly add a second "hello" method
-      boolean helloMethodExists = classDecl.getBody().getStatements().stream()
+      boolean helloMethodExists = cd.getBody().getStatements().stream()
               .filter(J.MethodDeclaration.class::isInstance)
               .map(J.MethodDeclaration.class::cast)
               .anyMatch(methodDeclaration -> methodDeclaration.getName().getSimpleName().equals("hello"));
