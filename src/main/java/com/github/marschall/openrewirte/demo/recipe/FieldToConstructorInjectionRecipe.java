@@ -10,6 +10,7 @@ import org.openrewrite.internal.ListUtils;
 import org.openrewrite.java.JavaIsoVisitor;
 import org.openrewrite.java.JavaVisitor;
 import org.openrewrite.java.tree.Expression;
+import org.openrewrite.java.tree.Flag;
 import org.openrewrite.java.tree.J;
 import org.openrewrite.java.tree.J.Annotation;
 import org.openrewrite.java.tree.J.ClassDeclaration;
@@ -70,19 +71,20 @@ public class FieldToConstructorInjectionRecipe extends Recipe {
         if (isAutowiredField(statement)) {
           J.VariableDeclarations fieldDeclaration = (J.VariableDeclarations) statement;
           autowiredFields.add(fieldDeclaration);
+
+          fieldDeclaration = removeAutowired(fieldDeclaration);
           if (!isFinal(fieldDeclaration)) {
-            newStatements.add(makeFinal(fieldDeclaration, executionContext));
-            modified = true;
-          } else {
-            newStatements.add(statement);
+            fieldDeclaration = makeFinal(fieldDeclaration, executionContext);
           }
+          newStatements.add(fieldDeclaration);
+          modified = true;
         } else {
           newStatements.add(statement);
         }
       }
 
       if (modified) {
-        newStatements.add(assignmentConstructor(newIdentifier(cd.getSimpleName()), autowiredFields));
+        newStatements.add(assignmentConstructor(cd, autowiredFields));
         return cd.withBody(autoFormat(body.withStatements(newStatements), executionContext));
       } else {
         return cd;
@@ -101,15 +103,26 @@ public class FieldToConstructorInjectionRecipe extends Recipe {
           .findAny()
           .isPresent();
     }
+    
 
-    private J.MethodDeclaration assignmentConstructor(Identifier className, List<J.VariableDeclarations> fieldDeclarations) {
-      List<Annotation> leadingAnnotations = List.of(newAnnotation("org.springframework.beans.factory.annotation.Autowired"));
+    private J.VariableDeclarations removeAutowired(J.VariableDeclarations variableDeclarations) {
+      List<Annotation> withoutAutowired = variableDeclarations.getLeadingAnnotations().stream()
+        .filter(annotation -> !TypeUtils.isOfType(annotation.getType(), AUTOWIRED))
+        .toList();
+      return variableDeclarations.withLeadingAnnotations(withoutAutowired);
+    }
+
+    private J.MethodDeclaration assignmentConstructor(J.ClassDeclaration cd, List<J.VariableDeclarations> fieldDeclarations) {
+      Identifier simpleName = newIdentifier(cd.getSimpleName());
+      List<Annotation> leadingAnnotations = List.of(newAnnotation("Autowired", AUTOWIRED));
       List<Modifier> modifiers = List.of(newModifier(J.Modifier.Type.Public));
-      IdentifierWithAnnotations name = new IdentifierWithAnnotations(className, List.of());
+      IdentifierWithAnnotations name = new IdentifierWithAnnotations(simpleName, List.of());
       JContainer<Statement> parameters = asParameters(fieldDeclarations);
+      JavaType.Method methodType = new JavaType.Method(null, Flag.Public.getBitMask(), cd.getType(), "<constructor>", cd.getName().getType(), null, null, null, null);
+
       J.Block body = new J.Block(Tree.randomId(), Space.EMPTY, Markers.EMPTY, JRightPadded.build(false), buildAssignments(fieldDeclarations), Space.EMPTY);
 
-      MethodDeclaration constructor = new J.MethodDeclaration(Tree.randomId(), Space.EMPTY, Markers.EMPTY, leadingAnnotations, modifiers, null, null, name, parameters, null, body, null, null);
+      MethodDeclaration constructor = new J.MethodDeclaration(Tree.randomId(), Space.EMPTY, Markers.EMPTY, leadingAnnotations, modifiers, null, null, name, parameters, null, body, null, methodType);
       return constructor;
     }
     
@@ -121,12 +134,16 @@ public class FieldToConstructorInjectionRecipe extends Recipe {
           .toList();
     }
 
-    private static J.Annotation newAnnotation(String name) {
-      return new J.Annotation(Tree.randomId(), Space.EMPTY, Markers.EMPTY, newIdentifier(name), JContainer.empty());
+    private static J.Annotation newAnnotation(String name, JavaType type) {
+      return new J.Annotation(Tree.randomId(), Space.EMPTY, Markers.EMPTY, newIdentifier(name, type), null);
+    }
+    
+    private static J.Identifier newIdentifier(String name, JavaType type) {
+      return new J.Identifier(Tree.randomId(), Space.EMPTY, Markers.EMPTY, name, type, null);
     }
 
     private static J.Identifier newIdentifier(String name) {
-      return new J.Identifier(Tree.randomId(), Space.EMPTY, Markers.EMPTY, name, null, null);
+      return newIdentifier(name, null);
     }
 
     private static JContainer<Statement> asParameters(List<J.VariableDeclarations> fieldDeclarations) {
@@ -141,7 +158,7 @@ public class FieldToConstructorInjectionRecipe extends Recipe {
     private static J.Assignment asAssignment(J.VariableDeclarations variableDeclarations) {
       NamedVariable parameter = variableDeclarations.getVariables().get(0);
       // name of the parameter and field
-      Identifier name = newIdentifier(parameter.getSimpleName());
+      Identifier name = newIdentifier(parameter.getSimpleName(), parameter.getType());
       // type of the name and field
       JavaType type = parameter.getType();
       Expression target = newIdentifier("this");

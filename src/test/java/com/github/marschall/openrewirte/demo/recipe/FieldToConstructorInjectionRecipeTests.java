@@ -38,7 +38,9 @@ class FieldToConstructorInjectionRecipeTests implements RewriteTest {
 
              public class SampleBean {
 
+
                  private final Integer firstDependency;
+
 
                  private final String secondDependency;
 
@@ -46,7 +48,7 @@ class FieldToConstructorInjectionRecipeTests implements RewriteTest {
                  public SampleBean(Integer firstDependency, String secondDependency) {
                      this.firstDependency = firstDependency;
                      this.secondDependency = secondDependency;
-               }
+                 }
              
              }
              """));
